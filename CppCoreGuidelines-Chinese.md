@@ -574,171 +574,218 @@ behaviors and edge case behavior as a direct result of *not* having a rigorous
 standard definition.  With sufficient use of any such extension, expected
 portability will be impacted.
 
-##### Note
-
+##### 备注
+使用标准C++并不保证可移植性（更不保证正确性）。
 Using valid ISO C++ does not guarantee portability (let alone correctness).
+避免对未定义行为的依赖（例如，[未定义的求值顺序](#Res-order)）
 Avoid dependence on undefined behavior (e.g., [undefined order of evaluation](#Res-order))
+注意
 and be aware of constructs with implementation defined meaning (e.g., `sizeof(int)`).
 
-##### Note
-
+##### 备注
+有些环境需要限制使用标准C++或者是特性库，例如，飞机控制软件标准会避免动态内存分配。
 There are environments where restrictions on use of standard C++ language or library features are necessary, e.g., to avoid dynamic memory allocation as required by aircraft control software standards.
+在这种情况下，使用针对特定环境定制的编码指南的扩展来控制他们的（不）使用。
 In such cases, control their (dis)use with an extension of these Coding Guidelines customized to the specific environment.
 
-##### Enforcement
-
+##### 实施
+使用最新的C++编译器（当前是C++17，C++4，或者C++11），有一系列不接受扩展的选项。
 Use an up-to-date C++ compiler (currently C++17, C++14, or C++11) with a set of options that do not accept extensions.
 
-### <a name="Rp-what"></a>P.3: Express intent
+### <a name="Rp-what"></a>P.3: 表达意图
 
-##### Reason
+##### 原因
 
+除非明确说明某些代码的意图（例如，使用名称或注释），否则无法判断该代码是否按照其预期的方式工作。
 Unless the intent of some code is stated (e.g., in names or comments), it is impossible to tell whether the code does what it is supposed to do.
 
-##### Example
-
+##### 代码示例
+```cpp
     gsl::index i = 0;
     while (i < v.size()) {
         // ... do something with v[i] ...
     }
-
+```
+在这段代码中，只是简单的循环读取`v`的元素的意图并没有被表现出来。数组索引的实现细节被暴露出来了（这样它可能被滥用），`i`的生命周期超过了它的使用范围，这可能是有意的，也可能是无意的。而这些读者并不能从这段代码里获知。
 The intent of "just" looping over the elements of `v` is not expressed here. The implementation detail of an index is exposed (so that it might be misused), and `i` outlives the scope of the loop, which might or might not be intended. The reader cannot know from just this section of code.
 
-Better:
-
+更好的写法:
+```cpp
     for (const auto& x : v) { /* do something with the value of x */ }
-
+```
+现在，不会明确的提到迭代机制，并且这个循环时作用在常量引用元素上的，所以不会有意外的修改。如果想要被修改，这样写
 Now, there is no explicit mention of the iteration mechanism, and the loop operates on a reference to `const` elements so that accidental modification cannot happen. If modification is desired, say so:
-
+```cpp
     for (auto& x : v) { /* modify x */ }
-
+```
+关于for语句的更多内容，请参考[ES.71](#Res-for-range)。
 For more details about for-statements, see [ES.71](#Res-for-range).
+有时使用一个指定的算法。下面的例子使用了来自Ranges技术规范的`for_each`，它可以直接表明意图。
 Sometimes better still, use a named algorithm. This example uses the `for_each` from the Ranges TS because it directly expresses the intent:
-
+```cpp
     for_each(v, [](int x) { /* do something with the value of x */ });
     for_each(par, v, [](int x) { /* do something with the value of x */ });
-
+```
+最后的变量表明我们并不关系`v`中被处理的元素的索引。
 The last variant makes it clear that we are not interested in the order in which the elements of `v` are handled.
 
+一个程序员应该熟悉以下内容
 A programmer should be familiar with
 
+*  [指南支持库](#S-gsl)
+*  [ISO C++ 标准库](#S-stdlib)
+*  在当前的项目中使用的任何基础库
 * [The guidelines support library](#S-gsl)
 * [The ISO C++ Standard Library](#S-stdlib)
 * Whatever foundation libraries are used for the current project(s)
 
-##### Note
-
+##### 备注
+替代方案：说应该做什么，而不是仅仅应该怎么做。
 Alternative formulation: Say what should be done, rather than just how it should be done.
 
-##### Note
-
+##### 备注
+一些语言的语言结构能够比其他语言更好的表达意图。
 Some language constructs express intent better than others.
 
-##### Example
-
+##### 代码示例
+如果我们用两个`int`值来代表2D点的坐标，应该这样写
 If two `int`s are meant to be the coordinates of a 2D point, say so:
-
+```cpp
     draw_line(int, int, int, int);  // obscure
     draw_line(Point, Point);        // clearer
-
-##### Enforcement
-
+```
+##### 实施
+寻找可以替代的常见模式
 Look for common patterns for which there are better alternatives
 
+* 简单的`for`循环 vs range中的`for`循环
+* 接口`f(T*, int)` vs 接口`f(span<T>)`
+* 循环变量的作用范围太大
+* 没有保护的`new`和`delete`
+* 函数拥有太多内建类型的参数
 * simple `for` loops vs. range-`for` loops
 * `f(T*, int)` interfaces vs. `f(span<T>)` interfaces
 * loop variables in too large a scope
 * naked `new` and `delete`
 * functions with many parameters of built-in types
 
+
 There is a huge scope for cleverness and semi-automated program transformation.
 
-### <a name="Rp-typesafe"></a>P.4: Ideally, a program should be statically type safe
+### <a name="Rp-typesafe"></a>P.4: 理想情况下，一个程序是静态类型安全的
 
-##### Reason
+##### 原因
 
+理想情况下，一个程序应该是完全的静态（编译期）类型安全的。
+不幸的是，这几乎是不可能的。问题存在于：
 Ideally, a program would be completely statically (compile-time) type safe.
 Unfortunately, that is not possible. Problem areas:
 
+* 联合体
+* 转换
+* 数组衰退
+* 范围错误
+* 向下转换
 * unions
 * casts
 * array decay
 * range errors
 * narrowing conversions
 
-##### Note
+##### 备注
 
+这些领域都是一些严重问题的源头（例如，崩溃和违反安全）。
+我们试着提供替代它们的技术。
 These areas are sources of serious problems (e.g., crashes and security violations).
 We try to provide alternative techniques.
 
-##### Enforcement
-
+##### 实施
+我们根据程序的需求和可行性，分别禁止，限制或者检测单个问题类别，
 We can ban, restrain, or detect the individual problem categories separately, as required and feasible for individual programs.
+总是建议使用替代方法。
+例如：
 Always suggest an alternative.
 For example:
-
+* 联合体 -- 使用`variant`（C++17引入）
+* 转换 -- 尽可能少用；模板可以提供帮助
+* 数组衰退 -- 使用`span`（来自GSL）
+* 范围错误 -- 使用`span`
+* 向下转换 -- 尽量不使用，必要的时候使用`narrow`或者`narrow_cast`（来自GSL）
+* 
 * unions -- use `variant` (in C++17)
 * casts -- minimize their use; templates can help
 * array decay -- use `span` (from the GSL)
 * range errors -- use `span`
 * narrowing conversions -- minimize their use and use `narrow` or `narrow_cast` (from the GSL) where they are necessary
 
-### <a name="Rp-compile-time"></a>P.5: Prefer compile-time checking to run-time checking
+### <a name="Rp-compile-time"></a>P.5: 比起运行时检查，更应该使用编译期检查
 
-##### Reason
+##### 原因
 
+代码清晰度和性能。
 Code clarity and performance.
+你不必写处理编译期错误的错误处理函数。
 You don't need to write error handlers for errors caught at compile time.
 
-##### Example
-
+##### 代码示例
+```cpp
     // Int is an alias used for integers
     int bits = 0;         // don't: avoidable code
     for (Int i = 1; i; i <<= 1)
         ++bits;
     if (bits < 32)
         cerr << "Int too small\n";
-
+```
+示例代码不能实现它想要实现的结果（因为值溢出是未定义的），应该使用简单的`static_assert`来替代。
 This example fails to achieve what it is trying to achieve (because overflow is undefined) and should be replaced with a simple `static_assert`:
 
+```cpp
     // Int is an alias used for integers
     static_assert(sizeof(Int) >= 4);    // do: compile-time check
-
+```
+或者更好的方法是使用类型系统，用`int32_t`替代`Int`。
 Or better still just use the type system and replace `Int` with `int32_t`.
 
-##### Example
-
+##### 代码示例
+```cpp
     void read(int* p, int n);   // read max n integers into *p
     
     int a[100];
     read(a, 1000);    // bad, off the end
-
-better
-
+```
+好的代码示例
+```cpp
     void read(span<int> r); // read into the range of integers r
     
     int a[100];
     read(a);        // better: let the compiler figure out the number of elements
-
+```
+**替代方法**：不要把能在编译期就做好的事情推迟到运行时再做。
 **Alternative formulation**: Don't postpone to run time what can be done well at compile time.
 
-##### Enforcement
+##### 实施
 
+* 寻找指针参数
+* 对于范围越界问题，寻找运行时检查
 * Look for pointer arguments.
 * Look for run-time checks for range violations.
 
-### <a name="Rp-run-time"></a>P.6: What cannot be checked at compile time should be checkable at run time
 
-##### Reason
+### <a name="Rp-run-time"></a>P.6: 编译期不能检查的东西，要不运行期检查
 
+##### 原因
+
+将很难检测的问题留在程序中就是在要求崩溃和错误的结果。
 Leaving hard-to-detect errors in a program is asking for crashes and bad results.
 
-##### Note
+##### 备注
 
+
+理想情况下，我们要在运行期和编译期捕捉到所有的错误（这些错误不是程序的逻辑错误）。在运行期捕捉所有的错误是不可能的，而且也无法在运行期捕捉剩余的错误。然而，只要有足够的资源（分析程序，运行时检查，机器资源，时间），我们就应该写原则上可以被检查的程序
 Ideally, we catch all errors (that are not errors in the programmer's logic) at either compile time or run time. It is impossible to catch all errors at compile time and often not affordable to catch all remaining errors at run time. However, we should endeavor to write programs that in principle can be checked, given sufficient resources (analysis programs, run-time checks, machine resources, time).
 
-##### Example, bad
-
+##### 不好的代码示例
+```cpp
     // separately compiled, possibly dynamically loaded
     extern void f(int* p);
     
@@ -747,7 +794,7 @@ Ideally, we catch all errors (that are not errors in the programmer's logic) at 
         // bad: the number of elements is not passed to f()
         f(new int[n]);
     }
-
+```
 Here, a crucial bit of information (the number of elements) has been so thoroughly "obscured" that static analysis is probably rendered infeasible and dynamic checking can be very difficult when `f()` is part of an ABI so that we cannot "instrument" that pointer. We could embed helpful information into the free store, but that requires global changes to a system and maybe to the compiler. What we have here is a design that makes error detection very hard.
 
 ##### Example, bad
